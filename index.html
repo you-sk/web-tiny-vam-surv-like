@@ -1,0 +1,928 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Vampire Survivors Lite</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;700&display=swap" rel="stylesheet">
+    <style>
+        body {
+            font-family: 'Inter', sans-serif;
+            overflow: hidden; /* Prevent scrolling */
+            background-color: #1a202c; /* Dark background */
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            margin: 0;
+        }
+        #game-container {
+            position: relative;
+            width: 90vw; /* Responsive width */
+            max-width: 900px; /* Max width for larger screens */
+            height: calc(90vh - 20px); /* Responsive height, leave space for header/footer if any */
+            max-height: 600px; /* Max height for larger screens */
+            border-radius: 1rem; /* Rounded corners */
+            overflow: hidden;
+            box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05);
+            background-color: #2d3748; /* Slightly lighter dark background for container */
+        }
+        canvas {
+            display: block;
+            background-color: #1a202c;
+            width: 100%;
+            height: 100%;
+        }
+        .game-overlay {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            background-color: rgba(0, 0, 0, 0.7);
+            color: white;
+            z-index: 100;
+            border-radius: 1rem;
+        }
+        .game-button {
+            padding: 0.75rem 1.5rem;
+            background-color: #48bb78; /* Green */
+            color: white;
+            border-radius: 0.5rem;
+            font-size: 1.25rem;
+            font-weight: bold;
+            cursor: pointer;
+            transition: background-color 0.3s ease, transform 0.1s ease;
+            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+            border: none;
+        }
+        .game-button:hover {
+            background-color: #38a169;
+            transform: translateY(-2px);
+        }
+        .game-button:active {
+            transform: translateY(0);
+            box-shadow: none;
+        }
+        .hud-bar {
+            background-color: #4a5568; /* Darker gray */
+            border-radius: 9999px; /* Full rounded */
+            height: 0.75rem; /* 12px */
+            overflow: hidden;
+        }
+        .hud-fill {
+            height: 100%;
+            border-radius: 9999px;
+            transition: width 0.1s ease-out;
+        }
+        #hp-fill { background-color: #f56565; /* Red */ }
+        #exp-fill { background-color: #63b3ed; /* Blue */ }
+
+        .power-up-panel {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(0, 0, 0, 0.85);
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            gap: 1rem;
+            z-index: 150;
+            color: white;
+            padding: 1rem;
+            box-sizing: border-box;
+            border-radius: 1rem;
+        }
+        .power-up-card {
+            background-color: #2d3748;
+            padding: 1rem;
+            border-radius: 0.75rem;
+            cursor: pointer;
+            width: 90%;
+            max-width: 300px;
+            text-align: center;
+            transition: transform 0.2s ease, box-shadow 0.2s ease;
+            border: 2px solid #4a5568;
+        }
+        .power-up-card:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 8px 16px rgba(0, 0, 0, 0.3);
+        }
+        /* Style for the selected power-up card */
+        .power-up-card.selected-power-up {
+            border-color: #48bb78; /* Highlight color */
+            box-shadow: 0 0 0 3px #48bb78;
+            transform: scale(1.02);
+        }
+
+        .power-up-card h3 {
+            font-size: 1.125rem;
+            font-weight: bold;
+            margin-bottom: 0.5rem;
+            color: #48bb78;
+        }
+        .power-up-card p {
+            font-size: 0.875rem;
+            color: #cbd5e0;
+        }
+        .info-text {
+            font-size: 1.5rem;
+            margin-bottom: 1rem;
+            text-align: center;
+        }
+        .score-text {
+            font-size: 2rem;
+            font-weight: bold;
+            margin-top: 1rem;
+            color: #ecc94b; /* Yellow */
+        }
+    </style>
+</head>
+<body>
+    <div id="game-container" class="relative">
+        <canvas id="gameCanvas"></canvas>
+
+        <!-- Start Screen -->
+        <div id="start-screen" class="game-overlay">
+            <h1 class="text-4xl font-bold mb-6">ヴァンパイアサバイバーズ ライト</h1>
+            <p class="text-lg mb-8">どこまで生き残れるか？</p>
+            <button id="start-button" class="game-button">ゲーム開始</button>
+        </div>
+
+        <!-- Game Over Screen -->
+        <div id="game-over-screen" class="game-overlay hidden">
+            <h2 class="text-4xl font-bold mb-4">ゲームオーバー</h2>
+            <p class="text-lg mb-2">生存時間:</p>
+            <p id="final-score" class="score-text mb-8">00:00</p>
+            <button id="retry-button" class="game-button">リトライ</button>
+        </div>
+
+        <!-- Game Clear Screen -->
+        <div id="game-clear-screen" class="game-overlay hidden">
+            <h2 class="text-4xl font-bold mb-4">ゲームクリア！</h2>
+            <p class="text-lg mb-2">生存時間:</p>
+            <p id="clear-score" class="score-text mb-8">00:00</p>
+            <button id="clear-retry-button" class="game-button">リトライ</button>
+        </div>
+
+        <!-- Power Up Screen -->
+        <div id="power-up-screen" class="power-up-panel hidden">
+            <h2 class="text-2xl font-bold mb-4">レベルアップ！パワーアップを選択</h2>
+            <div id="power-up-options" class="grid grid-cols-1 gap-4">
+                <!-- Power up cards will be inserted here by JavaScript -->
+            </div>
+        </div>
+
+        <!-- HUD -->
+        <div class="absolute top-4 left-4 right-4 flex flex-col gap-2">
+            <div class="flex items-center text-white text-sm">
+                <span class="mr-2">HP:</span>
+                <div class="hud-bar flex-grow">
+                    <div id="hp-fill" class="hud-fill" style="width: 100%;"></div>
+                </div>
+            </div>
+            <div class="flex items-center text-white text-sm">
+                <span class="mr-2">EXP:</span>
+                <div class="hud-bar flex-grow">
+                    <div id="exp-fill" class="hud-fill" style="width: 0%;"></div>
+                </div>
+            </div>
+            <div class="text-white text-lg font-bold">
+                スコア: <span id="score-display">00:00</span>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const canvas = document.getElementById('gameCanvas');
+        const ctx = canvas.getContext('2d');
+        const startScreen = document.getElementById('start-screen');
+        const gameOverScreen = document.getElementById('game-over-screen');
+        const gameClearScreen = document.getElementById('game-clear-screen');
+        const powerUpScreen = document.getElementById('power-up-screen');
+        const powerUpOptionsDiv = document.getElementById('power-up-options');
+        const startButton = document.getElementById('start-button');
+        const retryButton = document.getElementById('retry-button');
+        const clearRetryButton = document.getElementById('clear-retry-button');
+        const finalScoreDisplay = document.getElementById('final-score');
+        const clearScoreDisplay = document.getElementById('clear-score');
+        const hpFill = document.getElementById('hp-fill');
+        const expFill = document.getElementById('exp-fill');
+        const scoreDisplay = document.getElementById('score-display');
+
+        // Game State Variables
+        let gameState = 'start'; // 'start', 'playing', 'levelUp', 'gameOver', 'clear'
+        const GAME_CLEAR_TIME_MS = 5 * 60 * 1000; // 5 minutes in milliseconds
+
+        let player = {
+            x: 0,
+            y: 0,
+            radius: 15,
+            color: 'lime',
+            speed: 5,
+            maxHp: 100,
+            currentHp: 100,
+            attackDamage: 10,
+            attackInterval: 500, // ms
+            attackRange: 200,
+            lastAttackTime: 0,
+            level: 1,
+            exp: 0,
+            expToNextLevel: 100,
+            expAttractionRange: 50 // Initial experience gem attraction range
+        };
+        let enemies = [];
+        let projectiles = []; // Player attacks and enemy projectiles
+        let expGems = [];
+        let score = 0; // in milliseconds
+        let lastEnemySpawnTime = 0;
+        let enemySpawnInterval = 1000; // ms
+        let animationFrameId;
+
+        // Variables for keyboard/gamepad power-up selection
+        let chosenPowerUpsForSelection = []; // To hold the currently displayed power-up options
+        let selectedPowerUpIndex = 0; // Index of the currently selected power-up
+
+        // Key Input
+        const keys = {
+            ArrowUp: false, ArrowDown: false, ArrowLeft: false, ArrowRight: false,
+            w: false, s: false, a: false, d: false,
+            Enter: false // For game start/retry/select power-up
+        };
+
+        // Gamepad variables
+        let gamepadIndex = -1; // Index of the first connected gamepad
+        const gamepadButtonStates = {}; // To debounce gamepad button presses
+        const GAMEPAD_AXIS_THRESHOLD = 0.5; // Deadzone for analog sticks
+
+        // Power-up definitions
+        const powerUps = [
+            {
+                name: '攻撃力アップ',
+                description: '攻撃力が上昇します',
+                apply: (p) => { p.attackDamage += 5; }
+            },
+            {
+                name: '攻撃速度アップ',
+                description: '攻撃間隔が短くなります',
+                apply: (p) => { p.attackInterval = Math.max(100, p.attackInterval - 50); }
+            },
+            {
+                name: '最大HPアップ',
+                description: '最大HPが上昇し、HPも回復します',
+                apply: (p) => { p.maxHp += 20; p.currentHp = p.maxHp; } // Max HP also fully heals
+            },
+            {
+                name: '攻撃範囲アップ',
+                description: '攻撃の範囲が広がります',
+                apply: (p) => { p.attackRange += 20; }
+            },
+            {
+                name: '経験値吸引範囲アップ',
+                description: '経験値ジェムの引き寄せ範囲が広がります',
+                apply: (p) => { p.expAttractionRange += 20; }
+            }
+        ];
+
+        // --- Event Listeners ---
+        window.addEventListener('load', () => {
+            resizeCanvas();
+            // Initial player position to center
+            player.x = canvas.width / 2;
+            player.y = canvas.height / 2;
+        });
+
+        window.addEventListener('resize', resizeCanvas);
+
+        document.addEventListener('keydown', (e) => {
+            if (gameState === 'levelUp') {
+                if (e.key === 'ArrowUp' || e.key === 'w') {
+                    selectedPowerUpIndex = (selectedPowerUpIndex - 1 + chosenPowerUpsForSelection.length) % chosenPowerUpsForSelection.length;
+                    renderPowerUpOptions(); // Re-render to update highlighting
+                    e.preventDefault(); // Prevent scrolling
+                } else if (e.key === 'ArrowDown' || e.key === 's') {
+                    selectedPowerUpIndex = (selectedPowerUpIndex + 1) % chosenPowerUpsForSelection.length;
+                    renderPowerUpOptions(); // Re-render to update highlighting
+                    e.preventDefault(); // Prevent scrolling
+                } else if (e.key === 'Enter') {
+                    if (chosenPowerUpsForSelection.length > 0) {
+                        selectPowerUp(chosenPowerUpsForSelection[selectedPowerUpIndex]);
+                    }
+                }
+            } else if (gameState === 'start' || gameState === 'gameOver' || gameState === 'clear') {
+                if (e.key === 'Enter' && !keys.Enter) { // Debounce for Enter key
+                    keys.Enter = true;
+                    startGame();
+                }
+            } else if (keys.hasOwnProperty(e.key)) {
+                keys[e.key] = true;
+            }
+        });
+
+        document.addEventListener('keyup', (e) => {
+            if (gameState === 'start' || gameState === 'gameOver' || gameState === 'clear') {
+                if (e.key === 'Enter') {
+                    keys.Enter = false;
+                }
+            } else if (keys.hasOwnProperty(e.key)) {
+                keys[e.key] = false;
+            }
+        });
+
+        startButton.addEventListener('click', startGame);
+        retryButton.addEventListener('click', startGame);
+        clearRetryButton.addEventListener('click', startGame); // Listen for clear retry button
+
+        // Gamepad connection events
+        window.addEventListener("gamepadconnected", (e) => {
+            console.log("Gamepad connected at index %d: %s. %d buttons, %d axes.",
+                e.gamepad.index, e.gamepad.id,
+                e.gamepad.buttons.length, e.gamepad.axes.length);
+            if (gamepadIndex === -1) { // Only track the first connected gamepad
+                gamepadIndex = e.gamepad.index;
+            }
+        });
+
+        window.addEventListener("gamepaddisconnected", (e) => {
+            console.log("Gamepad disconnected from index %d: %s",
+                e.gamepad.index, e.gamepad.id);
+            if (gamepadIndex === e.gamepad.index) {
+                gamepadIndex = -1; // Reset if the tracked gamepad is disconnected
+            }
+        });
+
+        // --- Game Functions ---
+        function resizeCanvas() {
+            // Set canvas size to match its parent container's computed style
+            const container = document.getElementById('game-container');
+            canvas.width = container.clientWidth;
+            canvas.height = container.clientHeight;
+            // Reposition player to center if game is not active
+            if (gameState === 'start' || gameState === 'gameOver' || gameState === 'clear') {
+                player.x = canvas.width / 2;
+                player.y = canvas.height / 2;
+            }
+        }
+
+        function startGame() {
+            // Reset game state
+            player = {
+                x: canvas.width / 2,
+                y: canvas.height / 2,
+                radius: 15,
+                color: 'lime',
+                speed: 5,
+                maxHp: 100,
+                currentHp: 100,
+                attackDamage: 10,
+                attackInterval: 500,
+                attackRange: 200,
+                lastAttackTime: 0,
+                level: 1,
+                exp: 0,
+                expToNextLevel: 100,
+                expAttractionRange: 50 // Reset attraction range on new game
+            };
+            enemies = [];
+            projectiles = [];
+            expGems = [];
+            score = 0;
+            lastEnemySpawnTime = 0;
+            enemySpawnInterval = 1000;
+
+            // Reset the last timestamp for the game loop to prevent huge initial deltaTime
+            gameLoop.lastTimestamp = 0;
+
+            // Hide screens and start playing
+            startScreen.classList.add('hidden');
+            gameOverScreen.classList.add('hidden');
+            gameClearScreen.classList.add('hidden'); // Hide clear screen
+            powerUpScreen.classList.add('hidden');
+            gameState = 'playing';
+
+            // Start game loop
+            if (animationFrameId) {
+                cancelAnimationFrame(animationFrameId);
+            }
+            gameLoop(0); // Pass initial timestamp
+        }
+
+        function gameOver() {
+            gameState = 'gameOver';
+            cancelAnimationFrame(animationFrameId); // Stop game loop
+            finalScoreDisplay.textContent = formatTime(score);
+            gameOverScreen.classList.remove('hidden');
+        }
+
+        function gameClear() {
+            gameState = 'clear';
+            cancelAnimationFrame(animationFrameId); // Stop game loop
+            clearScoreDisplay.textContent = formatTime(score);
+            gameClearScreen.classList.remove('hidden');
+        }
+
+        function formatTime(ms) {
+            const totalSeconds = Math.floor(ms / 1000);
+            const minutes = Math.floor(totalSeconds / 60);
+            const seconds = totalSeconds % 60;
+            return `${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`;
+        }
+
+        function gameLoop(timestamp) {
+            // Handle gamepad input first
+            handleGamepadInput();
+
+            // Only update and draw if playing or leveling up
+            if (gameState === 'playing' || gameState === 'levelUp') {
+                const deltaTime = timestamp - (gameLoop.lastTimestamp || timestamp);
+                gameLoop.lastTimestamp = timestamp;
+
+                if (gameState === 'playing') {
+                    update(deltaTime, timestamp); // Pass timestamp to update
+                }
+                draw();
+            }
+
+            animationFrameId = requestAnimationFrame(gameLoop);
+        }
+
+        function update(deltaTime, timestamp) { // Accept timestamp as argument
+            score += deltaTime;
+
+            // Check for game clear condition
+            if (score >= GAME_CLEAR_TIME_MS) {
+                gameClear();
+                return; // Stop updating if game is cleared
+            }
+
+            updatePlayer(deltaTime, timestamp); // Pass timestamp to updatePlayer
+            updateEnemies(deltaTime, timestamp); // Pass timestamp to updateEnemies for ranged attacks
+            updateProjectiles(deltaTime);
+            updateExpGems(deltaTime);
+            handleCollisions();
+            spawnEnemies(deltaTime, timestamp); // Pass timestamp to spawnEnemies
+            updateHUD();
+
+            if (player.currentHp <= 0) {
+                gameOver();
+            }
+        }
+
+        function updatePlayer(deltaTime, timestamp) { // Accept timestamp as argument
+            let dx = 0;
+            let dy = 0;
+
+            // Keyboard input
+            if (keys.ArrowLeft || keys.a) dx = -player.speed;
+            if (keys.ArrowRight || keys.d) dx = player.speed;
+            if (keys.ArrowUp || keys.w) dy = -player.speed;
+            if (keys.ArrowDown || keys.s) dy = player.speed;
+
+            // Gamepad input (if connected)
+            if (gamepadIndex !== -1) {
+                const gamepad = navigator.getGamepads()[gamepadIndex];
+                if (gamepad) {
+                    const leftStickX = gamepad.axes[0];
+                    const leftStickY = gamepad.axes[1];
+
+                    if (Math.abs(leftStickX) > GAMEPAD_AXIS_THRESHOLD) {
+                        dx = leftStickX * player.speed;
+                    }
+                    if (Math.abs(leftStickY) > GAMEPAD_AXIS_THRESHOLD) {
+                        dy = leftStickY * player.speed;
+                    }
+                }
+            }
+
+
+            player.x += dx;
+            player.y += dy;
+
+            // Keep player within canvas bounds
+            player.x = Math.max(player.radius, Math.min(canvas.width - player.radius, player.x));
+            player.y = Math.max(player.radius, Math.min(canvas.height - player.radius, player.y));
+
+            // Automatic attack
+            if (timestamp - player.lastAttackTime > player.attackInterval) {
+                player.lastAttackTime = timestamp;
+                // Simple area attack around the player
+                projectiles.push({
+                    x: player.x,
+                    y: player.y,
+                    radius: player.attackRange, // Attack is an expanding circle/aura
+                    color: 'rgba(255,255,0,0.3)', // Yellow transparent
+                    damage: player.attackDamage,
+                    duration: 100, // ms, how long the aura lasts
+                    source: 'player' // Indicate it's a player projectile
+                });
+            }
+        }
+
+        function handleGamepadInput() {
+            const gamepads = navigator.getGamepads();
+            const gamepad = gamepads[gamepadIndex];
+
+            if (!gamepad) {
+                gamepadIndex = -1; // No gamepad found, reset index
+                return;
+            }
+
+            // Handle button presses for start/retry/select
+            const buttonA = gamepad.buttons[0]; // Assuming button 0 is 'A' or equivalent
+            const dpadUp = gamepad.buttons[12]; // D-pad Up
+            const dpadDown = gamepad.buttons[13]; // D-pad Down
+
+            // Debounce function for buttons
+            const isButtonPressed = (button) => button.pressed && !gamepadButtonStates[button.index];
+            const setButtonState = (button, state) => gamepadButtonStates[button.index] = state;
+
+            // Debounce for analog stick directions
+            const isAxisPressed = (axisValue, direction, stateKey) => {
+                const pressed = (direction === 'up' && axisValue < -GAMEPAD_AXIS_THRESHOLD) ||
+                                (direction === 'down' && axisValue > GAMEPAD_AXIS_THRESHOLD);
+                const debounced = pressed && !gamepadButtonStates[stateKey];
+                if (pressed) gamepadButtonStates[stateKey] = true;
+                else gamepadButtonStates[stateKey] = false;
+                return debounced;
+            };
+
+
+            if (gameState === 'start' || gameState === 'gameOver' || gameState === 'clear') {
+                if (isButtonPressed(buttonA)) {
+                    setButtonState(buttonA, true);
+                    startGame();
+                } else if (!buttonA.pressed) {
+                    setButtonState(buttonA, false);
+                }
+            } else if (gameState === 'levelUp') {
+                // Check if any D-pad or left stick up/down is pressed
+                if (isButtonPressed(dpadUp) || isAxisPressed(gamepad.axes[1], 'up', 'leftStickUp')) {
+                    selectedPowerUpIndex = (selectedPowerUpIndex - 1 + chosenPowerUpsForSelection.length) % chosenPowerUpsForSelection.length;
+                    renderPowerUpOptions();
+                } else if (isButtonPressed(dpadDown) || isAxisPressed(gamepad.axes[1], 'down', 'leftStickDown')) {
+                    selectedPowerUpIndex = (selectedPowerUpIndex + 1) % chosenPowerUpsForSelection.length;
+                    renderPowerUpOptions();
+                } else if (isButtonPressed(buttonA)) {
+                    setButtonState(buttonA, true);
+                    if (chosenPowerUpsForSelection.length > 0) {
+                        selectPowerUp(chosenPowerUpsForSelection[selectedPowerUpIndex]);
+                    }
+                }
+
+                // Reset button states when released for this specific state
+                if (!dpadUp.pressed) setButtonState(dpadUp, false);
+                if (!dpadDown.pressed) setButtonState(dpadDown, false);
+                if (!buttonA.pressed) setButtonState(buttonA, false);
+            }
+        }
+
+
+        function updateEnemies(deltaTime, timestamp) { // Accept timestamp for ranged enemy attacks
+            enemies.forEach((enemy, index) => {
+                const angle = Math.atan2(player.y - enemy.y, player.x - enemy.x);
+                enemy.x += Math.cos(angle) * enemy.speed;
+                enemy.y += Math.sin(angle) * enemy.speed;
+
+                // Ranged enemy attack logic
+                if (enemy.type === 'ranged' && timestamp - enemy.lastAttackTime > enemy.attackInterval) {
+                    enemy.lastAttackTime = timestamp;
+
+                    // Calculate initial direction towards player
+                    const projectileAngle = Math.atan2(player.y - enemy.y, player.x - enemy.x);
+
+                    projectiles.push({
+                        x: enemy.x,
+                        y: enemy.y,
+                        radius: 5, // Projectile size
+                        color: 'orange',
+                        damage: enemy.projectileDamage,
+                        speed: enemy.projectileSpeed,
+                        initialAngle: projectileAngle, // Store initial angle for straight movement
+                        source: 'enemy', // Indicate it's an enemy projectile
+                        duration: 8000 // Projectile lasts for 8 seconds to ensure it goes off-screen
+                    });
+                }
+            });
+        }
+
+        function updateProjectiles(deltaTime) {
+            for (let i = projectiles.length - 1; i >= 0; i--) {
+                const p = projectiles[i];
+
+                if (p.source === 'player') {
+                    p.duration -= deltaTime;
+                    if (p.duration <= 0) {
+                        projectiles.splice(i, 1);
+                    }
+                } else if (p.source === 'enemy') {
+                    // Move enemy projectiles straight based on their initial angle
+                    p.x += Math.cos(p.initialAngle) * p.speed;
+                    p.y += Math.sin(p.initialAngle) * p.speed;
+
+                    p.duration -= deltaTime;
+                    // Remove if duration runs out or if it goes off screen
+                    if (p.duration <= 0 || p.x < -p.radius || p.x > canvas.width + p.radius || p.y < -p.radius || p.y > canvas.height + p.radius) {
+                        projectiles.splice(i, 1);
+                    }
+                }
+            }
+        }
+
+        function updateExpGems(deltaTime) {
+            expGems.forEach((gem, index) => {
+                // Gems move towards player if close enough, otherwise they just sit there
+                const dist = Math.hypot(player.x - gem.x, player.y - gem.y);
+                // Use player's expAttractionRange for attraction
+                if (dist < player.radius + player.expAttractionRange) {
+                    const angle = Math.atan2(player.y - gem.y, player.x - gem.x);
+                    gem.x += Math.cos(angle) * gem.speed;
+                    gem.y += Math.sin(angle) * gem.speed;
+                }
+
+                // Check if player collected the gem
+                if (dist < player.radius + gem.radius) {
+                    player.exp += gem.value;
+                    expGems.splice(index, 1); // Remove collected gem
+                    checkLevelUp();
+                }
+            });
+        }
+
+        function spawnEnemies(deltaTime, timestamp) { // Accept timestamp as argument
+            if (timestamp - lastEnemySpawnTime > enemySpawnInterval) {
+                lastEnemySpawnTime = timestamp;
+
+                // Gradually increase number of enemies spawned per interval
+                const baseEnemiesPerSpawn = 1;
+                // Increase enemy count more aggressively over time
+                const numEnemiesMultiplier = 1 + Math.floor(score / 4000); // Add 1 enemy to this batch every 4 seconds
+                const numEnemiesToSpawn = baseEnemiesPerSpawn + numEnemiesMultiplier;
+
+                for (let i = 0; i < numEnemiesToSpawn; i++) {
+                    let x, y;
+                    const side = Math.floor(Math.random() * 4); // 0:top, 1:right, 2:bottom, 3:left
+                    const offset = 50; // Spawn slightly outside canvas
+
+                    if (side === 0) { // Top
+                        x = Math.random() * canvas.width;
+                        y = -offset;
+                    } else if (side === 1) { // Right
+                        x = canvas.width + offset;
+                        y = Math.random() * canvas.height;
+                    } else if (side === 2) { // Bottom
+                        x = Math.random() * canvas.width;
+                        y = canvas.height + offset;
+                    } else { // Left
+                        x = -offset;
+                        y = Math.random() * canvas.height;
+                    }
+
+                    // Determine enemy type based on score/time
+                    let enemyType = 'normal';
+                    // Swarmer type removed as per user request.
+                    // Introduce Tanks after 30 seconds
+                    if (score > 30 * 1000) {
+                        if (Math.random() < 0.2) { // 20% chance for tank
+                            enemyType = 'tank';
+                        }
+                    }
+                    // Introduce Ranged after 45 seconds
+                    if (score > 45 * 1000) {
+                        // Increase probability of ranged enemies appearing as time goes on, up to 30%
+                        const rangedChance = Math.min(0.3, 0.15 + (score - 45000) / 100000); // Caps at 0.3 after 145 seconds
+                        if (Math.random() < rangedChance) {
+                            enemyType = 'ranged';
+                        }
+                    }
+
+                    let newEnemy;
+                    const baseSpeed = 1 + (score / 150000); // Overall very slow speed increase
+                    const baseHp = 30 + Math.floor(score / 5000); // Overall HP increase
+
+                    switch (enemyType) {
+                        case 'normal':
+                            newEnemy = {
+                                type: 'normal',
+                                x: x, y: y,
+                                radius: 10 + Math.random() * 5,
+                                color: 'red',
+                                speed: baseSpeed + Math.random() * 0.5,
+                                hp: baseHp, maxHp: baseHp,
+                                expValue: 10
+                            };
+                            break;
+                        /* Removed swarmer type as per user request
+                        case 'swarmer':
+                            newEnemy = {
+                                type: 'swarmer',
+                                x: x, y: y,
+                                radius: 8,
+                                color: 'orange',
+                                speed: (baseSpeed * 2.5) + Math.random() * 1.5, // Faster
+                                hp: baseHp * 0.5, maxHp: baseHp * 0.5, // Lower HP
+                                expValue: 5
+                            };
+                            break;
+                        */
+                        case 'tank':
+                            newEnemy = {
+                                type: 'tank',
+                                x: x, y: y,
+                                radius: 25,
+                                color: 'gray',
+                                speed: (baseSpeed * 0.2) + (Math.random() * 0.1), // Adjusted: Much slower
+                                hp: baseHp * 3, maxHp: baseHp * 3, // Higher HP
+                                expValue: 30
+                            };
+                            break;
+                        case 'ranged':
+                            newEnemy = {
+                                type: 'ranged',
+                                x: x, y: y,
+                                radius: 12,
+                                color: 'purple',
+                                speed: (baseSpeed * 0.05) + (Math.random() * 0.05), // Adjusted: Extremely slow, almost stationary
+                                hp: baseHp * 0.8, maxHp: baseHp * 0.8,
+                                expValue: 15,
+                                // Ranged properties
+                                projectileDamage: 10 + Math.floor(score / 10000),
+                                projectileSpeed: 0.8 + (score / 200000), // Retained: Very slow initial, very slow scaling
+                                attackInterval: Math.max(4000, 8000 - (score / 100)), // Adjusted: Much slower initial attack, min 4000ms
+                                lastAttackTime: timestamp
+                            };
+                            break;
+                    }
+                    enemies.push(newEnemy);
+                }
+                // Decrease spawn interval slightly faster for more enemies overall
+                enemySpawnInterval = Math.max(100, enemySpawnInterval - (score / 150000)); // Adjusted interval decrease
+            }
+        }
+
+        function handleCollisions() {
+            // Player Projectile - Enemy collision
+            projectiles.forEach((p, pIndex) => {
+                if (p.source === 'player') {
+                    enemies.forEach((enemy, eIndex) => {
+                        const dist = Math.hypot(p.x - enemy.x, p.y - enemy.y);
+                        if (dist < p.radius + enemy.radius) {
+                            enemy.hp -= p.damage;
+                            // For a simple aura attack, don't remove projectile immediately.
+                            // It's a continuous damage zone for its duration.
+                        }
+                    });
+                }
+            });
+
+            // Enemy Projectile - Player collision
+            for (let i = projectiles.length - 1; i >= 0; i--) {
+                const p = projectiles[i];
+                if (p.source === 'enemy') {
+                    const dist = Math.hypot(player.x - p.x, player.y - p.y);
+                    if (dist < player.radius + p.radius) {
+                        player.currentHp -= p.damage;
+                        projectiles.splice(i, 1); // Remove enemy projectile on hit
+                    }
+                }
+            }
+
+
+            // Remove defeated enemies and spawn exp gems
+            for (let i = enemies.length - 1; i >= 0; i--) {
+                if (enemies[i].hp <= 0) {
+                    expGems.push({
+                        x: enemies[i].x,
+                        y: enemies[i].y,
+                        radius: 5,
+                        color: 'lightblue',
+                        value: enemies[i].expValue,
+                        speed: 3 // Speed at which gem moves towards player
+                    });
+                    enemies.splice(i, 1);
+                }
+            }
+
+            // Player-Enemy collision (player takes damage from touching)
+            enemies.forEach((enemy) => {
+                const dist = Math.hypot(player.x - enemy.x, player.y - enemy.y);
+                if (dist < player.radius + enemy.radius) {
+                    player.currentHp -= 0.5; // Small continuous damage from touching
+                }
+            });
+        }
+
+        function checkLevelUp() {
+            if (player.exp >= player.expToNextLevel) {
+                player.level++;
+                player.exp = 0; // Reset exp
+                player.expToNextLevel = Math.floor(player.expToNextLevel * 1.5); // Increase exp required
+                showPowerUpScreen();
+            }
+        }
+
+        function showPowerUpScreen() {
+            gameState = 'levelUp';
+            powerUpScreen.classList.remove('hidden');
+            powerUpOptionsDiv.innerHTML = ''; // Clear previous options
+
+            // Select 3 random unique power-ups
+            const availablePowerUps = [...powerUps];
+            chosenPowerUpsForSelection = []; // Clear and store chosen power-ups for keyboard selection
+            for (let i = 0; i < 3; i++) {
+                if (availablePowerUps.length === 0) break;
+                const randomIndex = Math.floor(Math.random() * availablePowerUps.length);
+                chosenPowerUpsForSelection.push(availablePowerUps.splice(randomIndex, 1)[0]);
+            }
+
+            selectedPowerUpIndex = 0; // Reset selection to the first option
+            renderPowerUpOptions(); // Render and apply highlighting
+        }
+
+        function renderPowerUpOptions() {
+            powerUpOptionsDiv.innerHTML = ''; // Clear existing options
+            chosenPowerUpsForSelection.forEach((pu, index) => {
+                const card = document.createElement('div');
+                card.className = 'power-up-card';
+                if (index === selectedPowerUpIndex) {
+                    card.classList.add('selected-power-up'); // Add a class for highlighting
+                }
+                card.innerHTML = `
+                    <h3>${pu.name}</h3>
+                    <p>${pu.description}</p>
+                `;
+                card.addEventListener('click', () => selectPowerUp(pu));
+                powerUpOptionsDiv.appendChild(card);
+            });
+        }
+
+
+        function selectPowerUp(selectedPowerUp) {
+            selectedPowerUp.apply(player);
+            powerUpScreen.classList.add('hidden');
+            gameState = 'playing'; // Resume game
+        }
+
+        function updateHUD() {
+            hpFill.style.width = `${(player.currentHp / player.maxHp) * 100}%`;
+            expFill.style.width = `${(player.exp / player.expToNextLevel) * 100}%`;
+            scoreDisplay.textContent = formatTime(score);
+        }
+
+        function draw() {
+            ctx.clearRect(0, 0, canvas.width, canvas.height); // Clear canvas
+
+            // Draw Exp Gems
+            expGems.forEach(gem => {
+                ctx.beginPath();
+                ctx.arc(gem.x, gem.y, gem.radius, 0, Math.PI * 2);
+                ctx.fillStyle = gem.color;
+                ctx.fill();
+            });
+
+            // Draw Player
+            ctx.beginPath();
+            ctx.arc(player.x, player.y, player.radius, 0, Math.PI * 2);
+            ctx.fillStyle = player.color;
+            ctx.fill();
+
+            // Draw Projectiles (Player's attack aura & Enemy projectiles)
+            projectiles.forEach(p => {
+                ctx.beginPath();
+                if (p.source === 'player') {
+                    ctx.arc(p.x, p.y, p.radius * (1 - (p.duration / 100)), 0, Math.PI * 2); // Aura shrinks
+                } else if (p.source === 'enemy') {
+                    ctx.arc(p.x, p.y, p.radius, 0, Math.PI * 2); // Enemy projectiles are fixed size
+                }
+                ctx.fillStyle = p.color;
+                ctx.fill();
+            });
+
+            // Draw Enemies
+            enemies.forEach(enemy => {
+                ctx.beginPath();
+                ctx.arc(enemy.x, enemy.y, enemy.radius, 0, Math.PI * 2);
+                ctx.fillStyle = enemy.color;
+                ctx.fill();
+
+                // Draw enemy HP bar
+                const hpBarWidth = enemy.radius * 2;
+                const hpBarHeight = 3;
+                const hpBarX = enemy.x - hpBarWidth / 2;
+                const hpBarY = enemy.y - enemy.radius - 8;
+                ctx.fillStyle = '#4a5568'; // Background for HP bar
+                ctx.fillRect(hpBarX, hpBarY, hpBarWidth, hpBarHeight);
+                ctx.fillStyle = '#f56565'; // Red fill
+                ctx.fillRect(hpBarX, hpBarY, hpBarWidth * (enemy.hp / enemy.maxHp), hpBarHeight);
+            });
+        }
+    </script>
+</body>
+</html>
